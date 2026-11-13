@@ -13,6 +13,9 @@ from preflight.core import (
     run_checks,
 )
 
+# Assembled at runtime: a literal here would make preflight flag its own test suite.
+FAKE_KEY = "sk-" + "live" + "ABCdef0123456789ABCDEFGHIJ"
+
 
 def by_name(checks, name):
     return next(check for check in checks if check.name.startswith(name))
@@ -62,7 +65,7 @@ def test_busy_port_is_reported(tmp_path):
 
 
 def test_secret_detection(tmp_path):
-    (tmp_path / "config.yml").write_text("token: sk-liveABCdef0123456789ABCDEFGHIJ\n")
+    (tmp_path / "config.yml").write_text("token: {}\n".format(FAKE_KEY))
     check = check_secrets(tmp_path)[0]
     assert check.status == "fail"
     assert "config.yml" in check.detail
