@@ -3,7 +3,15 @@ import socket
 import subprocess
 
 from preflight.cli import main
-from preflight.core import check_env, check_git, check_lockfiles, check_ports, check_secrets, check_versions, run_checks
+from preflight.core import (
+    check_env,
+    check_git,
+    check_lockfiles,
+    check_ports,
+    check_secrets,
+    check_versions,
+    run_checks,
+)
 
 
 def by_name(checks, name):
@@ -65,8 +73,11 @@ def test_secret_detection(tmp_path):
 def test_gitignore_and_tracked_env(tmp_path):
     subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True)
     (tmp_path / ".env").write_text("API_KEY=abc\n")
-    checks = check_git(tmp_path)
-    assert by_name(checks, "gitignore").status == "fail"
+    # No .gitignore at all is a warning, not a failure.
+    assert by_name(check_git(tmp_path), "gitignore").status == "warn"
+    # A .gitignore that forgets .env is a failure.
+    (tmp_path / ".gitignore").write_text("node_modules/\n")
+    assert by_name(check_git(tmp_path), "gitignore").status == "fail"
     (tmp_path / ".gitignore").write_text(".env\nnode_modules/\n")
     assert by_name(check_git(tmp_path), "gitignore").status == "ok"
     subprocess.run(["git", "-C", str(tmp_path), "add", "-f", ".env"], check=True)
@@ -74,11 +85,13 @@ def test_gitignore_and_tracked_env(tmp_path):
 
 
 def test_run_checks_and_cli(tmp_path, capsys):
+    subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True)
     (tmp_path / ".env.example").write_text("API_KEY=\n")
     (tmp_path / ".env").write_text("API_KEY=abc\n")
+    (tmp_path / ".gitignore").write_text("node_modules/\n")
     checks = run_checks(tmp_path)
     assert {check.status for check in checks} <= {"ok", "warn", "fail"}
-    assert main([str(tmp_path), "--json"]) == 1  # no .gitignore, so git hygiene fails
+    assert main([str(tmp_path), "--json"]) == 1  # .env is not ignored
     payload = json.loads(capsys.readouterr().out)
     assert payload["summary"]["fail"] >= 1
     assert payload["root"] == str(tmp_path)
